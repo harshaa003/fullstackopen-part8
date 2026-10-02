@@ -55,12 +55,11 @@ const Authors = (props) => {
     try {
       await editAuthor({
         variables: {
-          name: name,
+          name,
           setBornTo: Number(born),
         },
       })
 
-      // Clear the form
       setName('')
       setBorn('')
     } catch (error) {
@@ -96,10 +95,18 @@ const Authors = (props) => {
         <div>
           <label>
             name
-            <input
+            <select
               value={name}
               onChange={(event) => setName(event.target.value)}
-            />
+            >
+              <option value="">select author</option>
+
+              {authors.map((author) => (
+                <option key={author.name} value={author.name}>
+                  {author.name}
+                </option>
+              ))}
+            </select>
           </label>
         </div>
 
