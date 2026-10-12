@@ -1,12 +1,12 @@
 
 require('dotenv').config()
 const mongoose = require('mongoose')
+const { ApolloServer } = require('@apollo/server')
+const { startStandaloneServer } = require('@apollo/server/standalone')
+const { GraphQLError } = require('graphql')
 
 const Book = require('./models/book')
 const Author = require('./models/author')
-
-const { ApolloServer } = require('@apollo/server')
-const { startStandaloneServer } = require('@apollo/server/standalone')
 
 const typeDefs = `
   type Book {
@@ -46,11 +46,11 @@ const typeDefs = `
 const resolvers = {
   Query: {
     bookCount: async () => {
-      return await Book.countDocuments({})
+      return Book.countDocuments({})
     },
 
     authorCount: async () => {
-      return await Author.countDocuments({})
+      return Author.countDocuments({})
     },
 
     allBooks: async (root, args) => {
@@ -72,17 +72,17 @@ const resolvers = {
         filter.genres = args.genre
       }
 
-      return await Book.find(filter).populate('author')
+      return Book.find(filter).populate('author')
     },
 
     allAuthors: async () => {
-      return await Author.find({})
+      return Author.find({})
     },
   },
 
   Author: {
     bookCount: async (root) => {
-      return await Book.countDocuments({
+      return Book.countDocuments({
         author: root._id,
       })
     },
@@ -90,43 +90,84 @@ const resolvers = {
 
   Mutation: {
     addBook: async (root, args) => {
-      let author = await Author.findOne({
-        name: args.author,
-      })
-
-      if (!author) {
-        author = new Author({
+      try {
+        let author = await Author.findOne({
           name: args.author,
         })
 
-        await author.save()
+        if (!author) {
+          author = new Author({
+            name: args.author,
+          })
+
+          await author.save()
+        }
+
+        const book = new Book({
+          title: args.title,
+          published: args.published,
+          author: author._id,
+          genres: args.genres,
+        })
+
+        await book.save()
+
+        return await book.populate('author')
+      } catch (error) {
+        if (
+          error.name === 'ValidationError' ||
+          error.name === 'CastError'
+        ) {
+          throw new GraphQLError(error.message, {
+            extensions: {
+              code: 'BAD_USER_INPUT',
+            },
+          })
+        }
+
+        if (error.code === 11000) {
+          throw new GraphQLError(
+            'Author name already exists',
+            {
+              extensions: {
+                code: 'BAD_USER_INPUT',
+              },
+            }
+          )
+        }
+
+        throw error
       }
-
-      const book = new Book({
-        title: args.title,
-        published: args.published,
-        author: author._id,
-        genres: args.genres,
-      })
-
-      await book.save()
-
-      return await book.populate('author')
     },
 
     editAuthor: async (root, args) => {
-      const author = await Author.findOne({
-        name: args.name,
-      })
+      try {
+        const author = await Author.findOne({
+          name: args.name,
+        })
 
-      if (!author) {
-        return null
+        if (!author) {
+          return null
+        }
+
+        author.born = args.setBornTo
+        await author.save()
+
+        return author
+      } catch (error) {
+        if (
+          error.name === 'ValidationError' ||
+          error.name === 'CastError'
+        ) {
+          throw new GraphQLError(error.message, {
+            extensions: {
+              code: 'BAD_USER_INPUT',
+            },
+          })
+        }
+
+        throw error
       }
-
-      author.born = args.setBornTo
-      await author.save()
-
-      return author
     },
   },
 }
@@ -134,7 +175,7 @@ const resolvers = {
 const start = async () => {
   try {
     await mongoose.connect(process.env.MONGODB_URI)
-    console.log('connected to MongoDB')
+    console.log('Connected to MongoDB')
 
     const server = new ApolloServer({
       typeDefs,
