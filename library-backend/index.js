@@ -45,27 +45,46 @@ const typeDefs = `
 
 const resolvers = {
   Query: {
-    bookCount: async () => Book.countDocuments(),
+    bookCount: async () => {
+      return await Book.countDocuments({})
+    },
 
-    authorCount: async () => Author.countDocuments(),
+    authorCount: async () => {
+      return await Author.countDocuments({})
+    },
 
-    allBooks: async () => {
-      return Book.find({}).populate('author')
+    allBooks: async (root, args) => {
+      const filter = {}
+
+      if (args.author) {
+        const author = await Author.findOne({
+          name: args.author,
+        })
+
+        if (!author) {
+          return []
+        }
+
+        filter.author = author._id
+      }
+
+      if (args.genre) {
+        filter.genres = args.genre
+      }
+
+      return await Book.find(filter).populate('author')
     },
 
     allAuthors: async () => {
-      const authors = await Author.find({})
+      return await Author.find({})
+    },
+  },
 
-      return Promise.all(
-        authors.map(async (author) => ({
-          name: author.name,
-          born: author.born,
-          id: author.id,
-          bookCount: await Book.countDocuments({
-            author: author._id,
-          }),
-        }))
-      )
+  Author: {
+    bookCount: async (root) => {
+      return await Book.countDocuments({
+        author: root._id,
+      })
     },
   },
 
@@ -92,7 +111,7 @@ const resolvers = {
 
       await book.save()
 
-      return book.populate('author')
+      return await book.populate('author')
     },
 
     editAuthor: async (root, args) => {
@@ -107,14 +126,7 @@ const resolvers = {
       author.born = args.setBornTo
       await author.save()
 
-      return {
-        name: author.name,
-        born: author.born,
-        id: author.id,
-        bookCount: await Book.countDocuments({
-          author: author._id,
-        }),
-      }
+      return author
     },
   },
 }
@@ -135,7 +147,7 @@ const start = async () => {
 
     console.log(`Server ready at ${url}`)
   } catch (error) {
-    console.error('Error starting server:', error.message)
+    console.error('Error starting server:', error)
   }
 }
 
